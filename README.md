@@ -1,2 +1,2 @@
 # df-browse
-Python module that provides curses-style browsing of a Pandas dataframe
+Python utility that provides curses-style browsing of a Pandas dataframe
