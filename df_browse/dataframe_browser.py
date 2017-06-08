@@ -1,17 +1,29 @@
 #!/usr/bin/env python
 from collections import defaultdict
 import os
+import sys
+import copy
 import pandas as pd
 import numpy as np
+
+import df_browse.urwid_table_browser as urwid_table_browser
 
 from df_browse.list_utils import *
 from df_browse.chunk_search_utils import *
 
-import df_browse.urwid_table_browser as urwid_table_browser
-
 from df_browse.gui_debug import *
 
 _global_urwid_browser_frame = None
+
+# a decorator
+def browser_func(f):
+    this_module = sys.modules[__name__]
+    print('adding function to dataframe_browser module', f, this_module, f.__name__)
+    # print(this_module.__dict__.keys())
+    setattr(this_module, f.__name__, f)
+    # print(this_module.__dict__.keys())
+    # globals()[f.__name__] = f
+
 
 def browse(df, name=None):
     return MultipleDataframeBrowser().add_df(df, name).browse
@@ -24,22 +36,26 @@ def browse_dir(directory_of_csvs):
         df = pd.read_csv(directory_of_csvs + os.sep + fn, index_col=False)
         name = fn[:-4]
         mdb.add_df(df, name)
-    return mdb.browse
+    return mdb.browse()
+
+
+class InnerObjects(object):
+    pass
 
 
 class MultipleDataframeBrowser(object):
     """Create one of these to start browsing pandas Dataframes in a curses-style terminal interface."""
-    def __init__(self, *args, table_browser_frame=None):
+    def __init__(self, *dfs, table_browser_frame=None):
         global _global_urwid_browser_frame
         if not table_browser_frame:
             if not _global_urwid_browser_frame:
                 _global_urwid_browser_frame = urwid_table_browser.TableBrowserUrwidLoopFrame()
-            self.urwid_frame = _global_urwid_browser_frame
-        else:
-            self.urwid_frame = table_browser_frame
-        self.browsers = dict()
-        self.active_browser_name = None
-        for df in args:
+            table_browser_frame = _global_urwid_browser_frame
+        self.__inner = InnerObjects()
+        self.__inner.urwid_frame = table_browser_frame
+        self.__inner.browsers = dict()
+        self.__inner.active_browser_name = None
+        for df in dfs:
             self.add_df(df)
 
     def add_df(self, df, name=None):
@@ -47,82 +63,113 @@ class MultipleDataframeBrowser(object):
 
         Preferably provide your own name here, but if you don't, we'll assign one..."""
         assert df is not None
-        i = len(self.browsers)
-        while not name:
-            name = 'df' + str(i)
-            if name in self.browsers:
-                i += 1
-                name = None # keep trying til we find something valid
-        name = name.strip()
-        print('making new table browser with name ', name)
-        self.browsers[name] = DataframeTableBrowser(df)
-        self.browsers[name].add_change_callback(self.urwid_frame.table_view.update_view)
-        if not self.active_browser_name:
-            self.active_browser_name = name
+        name = self._make_unique_name(name)
+        print('wrapping dataframe in new table browser with name', name)
+        self.__inner.browsers[name] = DataframeTableBrowser(df)
+        self.__inner.browsers[name].add_change_callback(self.__inner.urwid_frame.table_view.update_view)
+        if not self.__inner.active_browser_name:
+            self.__inner.active_browser_name = name
         return self # for call chaining
 
+    def _make_unique_name(self, name=''):
+        name = name.strip()
+        name = name if name else 'df'
+        test_name = name if name != 'df' else 'df_0'
+        i = 0
+        while test_name in self.__inner.browsers:
+            test_name = name + '_' + str(i)
+            i += 1
+        return test_name
+
     def rename_browser(self, current_name, new_name):
+        """Give the named browser a different name.
+
+        Will fail if the name is empty, or if it already exists in the Multibrowser."""
         new_name = new_name.strip()
         assert current_name and new_name
-        if new_name not in self.browsers and current_name != new_name:
-            browser = self.browsers.pop(current_name)
-            self.browsers[new_name] = browser
-            self.active_browser_name = new_name
+        if new_name not in self.__inner.browsers and current_name != new_name:
+            browser = self.__inner.browsers.pop(current_name)
+            self.__inner.browsers[new_name] = browser
+            if self.__inner.active_browser_name == current_name:
+                self.__inner.active_browser_name = new_name
+            return True
+        return False
 
-    def rename_current_browser(self, new_name):
-        self.rename_browser(self.active_browser_name, new_name)
+    def rename_active_browser(self, new_name):
+        """Give the active browser a different name."""
+        return self.rename_browser(self.__inner.active_browser_name, new_name)
 
     def copy_browser(self, name, new_name=None):
-        pass
+        if name not in self.__inner.browsers:
+            return False
+        new_name = new_name if new_name else name + '_copy'
+        new_name = self._make_unique_name(new_name)
+        self.__inner.browsers[new_name] = copy.deepcopy(self.__inner.browsers[name])
+        return True
 
     def open_new_browser(self, **kwargs):
         pass
 
     def __getitem__(self, df_name):
         """This returns the actual backing dataframe."""
-        return self.browsers[df_name].df
+        return self.__inner.browsers[df_name].df
+
     def __getattr__(self, df_name):
         """This returns the actual backing dataframe."""
-        return self.browsers[df_name].df
+        return self.__inner.browsers[df_name].df
+
     def __dir__(self):
         """Tab completion of the dataframes for IPython"""
-        keys = list(self.browsers.keys())
+        keys = list(self.__inner.browsers.keys())
         keys += list(dir(type(self)))
         keys += list(self.__dict__.keys())
         return keys
 
+    def __setattr__(self, key, value):
+        if key == '_MultipleDataframeBrowser__inner':
+            super().__setattr__(key, value)
+        else:
+            self[key] = value
+
+    def __setitem__(self, key, value):
+        if key in self.__inner.browsers:
+            self.__inner.browsers[self.active_browser_name]._change_df(value)
+        else:
+            self.add_df(key, value)
+
     def get_browser(self, name):
-        return self.browsers[name]
+        return self.__inner.browsers[name]
 
     @property
-    def current_browser(self):
-        return self.browsers[self.active_browser_name] if self.active_browser_name else None
-    @current_browser.setter
-    def current_browser(self, name):
-        if name in self.browsers:
-            self.active_browser_name = name
-    def set_current_browser(self, name):
-        self.current_browser = name
+    def active_browser(self):
+        return self.__inner.browsers[self.__inner.active_browser_name] if self.__inner.active_browser_name else None
+
+    def set_active_browser(self, name):
+        self.__inner.active_browser_name = name
         return self
 
     @property
-    def current_browser_name(self):
-        return self.active_browser_name
+    def active_browser_name(self):
+        return self.__inner.active_browser_name
     @property
     def all_browser_names(self):
-        return list(self.browsers.keys())
+        return list(self.__inner.browsers.keys())
 
-    @property
     def browse(self):
         """This actually brings up the interface. Can be re-entered after it exits and returns."""
-        self.urwid_frame.start(self)
+        self.__inner.urwid_frame.start(self)
         return self # for the ultimate chain, that returns itself so it can be started again.
 
     @property
     def fg(self):
         """Alias for browse"""
-        self.browse
+        return self.browse()
 
+
+class DataframeBrowserHistory(object):
+    def __init__(self, df, browse_columns):
+        self.df = df
+        self.browse_columns = browse_columns
 
 # the DataframeTableBrowser implements an interface of sorts that
 # the Urwid table browser uses to display a table.
@@ -133,138 +180,221 @@ class MultipleDataframeBrowser(object):
 # Please note that this class will not behave well if you have multiple columns with the same
 # column name.
 class DataframeTableBrowser(object):
-    """Implements the table browser contract for a single pandas Dataframe."""
+    """Implements the table browser contract for a single pandas Dataframe.
+
+    The basic conceit of a table browser is something that can provide the following set of functionality:
+
+    An underlying table (columns x rows), which can be identified by column names (strings)
+    and row indices (integers).
+
+    An ordered list of 'browse columns', which are string names that will uniquely identify
+    a column within the underlying table. These columns, in the order provided, are what a UI
+    should display. This list should be modifiable as well as readable.
+
+    A list of all columns in the underlying table, including those not currently present in the set
+    of browse columns. The order of these columns is not to be relied upon for any particular use.
+
+    A selected column and row. These may be used by a UI to display highlights, and may also be used
+    externally to determine the user's intent when using certain other functionality, such as search,
+    column shifting, etc.
+    These selections may or may not be considered as part of the undo history, depending on implementation.
+
+    A length, corresponding to the number of rows in the underlying table.
+
+    An undo history for both the browse columns and the table itself.
+    Though the history may keep track of these changes internally as separate items,
+    from the point of view of an external observer they are a single undo stack and cannot be undone separately.
+    The browser may choose to support any amount of 'undos', from 0 to effectively infinite,
+    but must provide the interface even if it does not support undo.
+
+    A redo history, comprised of actions that were undone without any intervening 'undoable'
+    table modifications having been performed. Like 'undo', the interface must be provided, but
+    the actual functionality need not necessarily be implemented.
+
+    """
     def __init__(self, df):
-        self.df_hist = [df]
-        self.browse_columns_history = [list(df.columns)]
-        self.undo_hist = list()
+        self.history = [DataframeBrowserHistory(df, list(df.columns))]
         self.change_cbs = list()
+        self._future = list()
         self.view = DataframeRowView(lambda: self.df)
-        self.add_change_callback(self.view.df_changed)
-        self._focused_column_index = 0
+        self._selected_column_index = 0 # TODO change this to be name-based.
+        self.add_change_callback(self.view._df_changed)
+
+    def __deepcopy__(self, memodict):
+        dfb = DataframeTableBrowser(self.original_df)
+        dfb.history = self.df_hist[:]
+        dfb._future = self._future[:]
+        dfb.change_cbs += [cb for cb in self.change_cbs if cb is not self.view._df_changed]
+        dfb._selected_column_index = self._selected_column_index
+        return dfb
 
     # TODO Join
     # TODO support displaying index as column. could use -1 as special value to indicate index in place of column name
     # TODO write out to file.
 
-    @property
-    def df(self):
-        return self.df_hist[-1]
+    # Browser interface methods and properties....
     @property
     def browse_columns(self):
-        return self.browse_columns_history[-1]
-    @property
-    def focused_column_index(self):
-        return self._focused_column_index
-    @property
-    def focused_column(self):
-        return self.browse_columns[self.focused_column_index]
-    @focused_column_index.setter
-    def focused_column_index(self, new_focus_col):
-        assert new_focus_col < len(self.browse_columns) and new_focus_col >= 0
-        self._focused_column_index = new_focus_col
+        """The set of columns currently being viewed, in their viewing order."""
+        return self.history[-1].browse_columns
+    @browse_columns.setter
+    def browse_columns(self, new_browse_columns):
+        """Set the list of columns currently being viewed.
+
+        Will raise an exception if any of the column names are not valid in the backing table."""
+        self._change_browse_cols(new_browse_columns)
     @property
     def selected_row(self):
+        """The index of the selected row."""
         return self.view.selected_row
+    @selected_row.setter
+    def selected_row(self, new_row):
+        old_row = self.view.selected_row
+        self.view.selected_row = new_row
+        if self.selected_row != old_row:
+            self._msg_cbs(table_changed=False) # TODO clean this all up
+    @property
+    def selected_column(self):
+        """The name of the selected column."""
+        return self.browse_columns[self._selected_column_index]
+    @selected_column.setter
+    def selected_column(self, new_focus_col):
+        """Sets the selected column, either by integer index in browse_columns, or a string name.
 
-    # relating to the original backing dataframe...
+        If the index or column name cannot be found in browse_columns, this will raise an exception.
+
+        Attempting to set this to an empty list will result in nothing being done.
+        """
+        new_focus_col = new_focus_col if isinstance(new_focus_col, int) else self.browse_columns.index(new_focus_col)
+        assert new_focus_col < len(self.browse_columns) and new_focus_col >= 0
+        self._selected_column_index = new_focus_col
     @property
     def all_columns(self):
         return list(self.original_df.columns)
-    @property
-    def original_df(self):
-        return self.df_hist[0]
 
     def __len__(self):
         return len(self.df)
 
-    def _msg_cbs(self):
-        for cb in self.change_cbs:
-            print('messaging cb', cb)
-            cb(self)
-
-    # TODO shouldn't this technically be by name?
-    def shift_column(self, col_idx, num_cols_to_right):
-        """Moves a column to a new location in the browsing order.
-
-        This doesn't directly change the focus column."""
-        new_dcols = shift_list_item(self.browse_columns, col_idx, num_cols_to_right)
-        return self._change_display_cols(self.browse_columns, new_dcols)
-
-    def _change_display_cols(self, old_cols, new_cols):
-        if old_cols != new_cols:
-            print('changing display cols')
-            self.browse_columns_history.append(new_cols)
-            self.undo_hist.append(self.browse_columns_history)
-            self._msg_cbs()
-            return True
-        return False
-
-    def _change_df(self, old_df, new_df):
-        self.df_hist.append(new_df)
-        self.undo_hist.append(self.df_hist)
-        self._msg_cbs()
-
-    def insert_column(self, col_name, index):
-        if col_name in list(self.df):
-            new_dcols = insert_item_if_not_present(self.browse_columns, col_name, index)
-            return self._change_display_cols(self.browse_columns, new_dcols)
-        return False
-
-    def hide_col_by_name(self, col_name):
-        new_cols = find_and_remove_list_item(self.browse_columns, col_name)
-        return self._change_display_cols(self.browse_columns, new_dcols)
-
-    def hide_col_by_index(self, index):
-        new_cols = remove_list_index(self.browse_columns, index)
-        return self._change_display_cols(self.browse_columns, new_cols)
-
     def undo(self, n=1):
-        while n > 0 and len(self.undo_hist) > 0:
-            change_type = self.undo_hist.pop()
-            if change_type == self.df_hist:
-                self.df_hist.pop()
-            elif change_type == self.browse_columns_history:
-                self.browse_columns_history.pop()
-            else:
-                print('cannot undo this unknown operation')
-                break
+        """Reverses the most recent change to the browser - either the column ordering or a change to the underlying table itself."""
+        if len(self.history) == 1:
+            return
+        table_changed = False
+        while n > 0 and len(self.history) > 1:
+            print('undo', n)
+            self._future.append(self.history.pop())
+            table_changed = table_changed or self._future[-1].df is not self.history[-1].df
             n -= 1
-        assert len(self.df_hist) > 0
-        assert len(self.browse_columns_history) > 0
-        self._msg_cbs()
+        assert len(self.history) > 0
+        self._msg_cbs(table_changed)
+
+    def redo(self, n=1):
+        if len(self._future) == 0:
+            return
+        table_changed = False
+        while n > 0 and len(self._future) > 0:
+            print('redo', n)
+            self.history.append(self._future.pop())
+            table_changed = table_changed or self.history[-2].df is not self.history[-1].df
+            n -= 1
+        self._msg_cbs(table_changed)
 
     def search_column(self, column, search_string, down=True, skip_current=False):
-        """This is delegated to the view because it maintains a convenient string cache."""
-        return self.view.search(column, search_string, down, skip_current)
+        """Searches a column (identified by its name) for a given search string.
 
-    def jump(self, location):
-        """Location may be an integer row index, a column name, or a percentage of the browser's rows between 0.0 and 1.0"""
-        if isinstance(location, int) or isinstance(location, float):
-            self.view.jump_to_row(location)
-        else: # assume it's a column name
-            self.focused_column_index = self.browse_columns.index(location)
-        self._msg_cbs()
-
-    # TODO add redo functionality, to undo an undo.
-    # would only allow redos immediately after undos.
+        This is delegated to the view because it maintains a convenient string cache."""
+        found = self.view.search(column, search_string, down, skip_current)
+        if found:
+            self._msg_cbs(table_changed=True)
+        return found
 
     def add_change_callback(self, cb):
         if cb not in self.change_cbs:
             self.change_cbs.append(cb)
 
-    def sort_on_columns(self, columns, ascending=True, algorithm='mergesort', na_position=None): # we default to mergesort to stay stable
-        na_position = na_position if na_position is not None else ('last' if ascending else 'first')
-        sorted_df = self.df.sort_values(columns, ascending=ascending, kind=algorithm, na_position=na_position)
-        self._change_df(self.df, sorted_df)
+    def call_browser_func(self, function_name, **kwargs):
+        print('looking up browser function by name', function_name)
+        this_module = sys.modules[__name__]
+        func = getattr(this_module, function_name)
+        print('found browser function', func)
+        new_df = func(self.df,
+                      c=self._real_column_index,
+                      r=self.selected_row,
+                      cn=self.selected_column,
+                      **kwargs)
+        if new_df is not None:
+            self._change_df(new_df)
 
-    def query(self, query_str):
-        # TODO maybe move this into the 'execute command' function
-        print('running query', query_str)
-        new_df = self.df.query(query_str)
-        print(len(new_df))
-        return self._change_df(self.df, new_df)
+    # All properties and methods following are NOT part of the browser interface
+    @property
+    def df(self):
+        return self.history[-1].df
 
+    @property
+    def original_df(self):
+        return self.history[0].df
+
+    # internal methods and properties
+    @property
+    def _real_column_index(self):
+        """The actual index of the selected column in the backing dataframe."""
+        self.df.columns.get_loc(self.selected_column)
+
+    def _cap_selected_column_index(self, new_cols):
+        if self._selected_column_index >= len(new_cols):
+            print('changing selected column to be valid: ', len(new_cols) - 1)
+            self._selected_column_index = len(new_cols) - 1
+
+    def _change_browse_cols(self, new_cols):
+        if self.browse_columns != new_cols and len(new_cols) > 0:
+            for col in new_cols:
+                if col not in self.all_columns:
+                    raise Exception('Column {} not found in backing dataframe.'.format(col))
+            print('changing browse columns')
+            self._cap_selected_column_index(new_cols)
+            self.history.append(DataframeBrowserHistory(self.history[-1].df, new_cols))
+            self._future.clear() # can't keep future once we're making user-specified changes.
+            self._msg_cbs(table_changed=False)
+            return True
+        return False
+
+    def _change_df(self, new_df):
+        assert isinstance(new_df, type(self.df))
+        print('changing dataframe...')
+        new_cols = list()
+        for col in new_df.columns:
+            if col not in self.browse_columns:
+                new_cols.append(col)
+        missing_cols = list()
+        for col in self.browse_columns:
+            if col not in new_df.columns:
+                missing_cols.append(col)
+        if len(new_cols) > 0 or len(missing_cols) > 0:
+            browse_columns = [col for col in self.history[-1].browse_columns if col not in missing_cols]
+            browse_columns += new_cols
+            self._cap_selected_column_index(browse_columns)
+            print('using new browse columns', browse_columns)
+            self.history.append(DataframeBrowserHistory(new_df, browse_columns))
+        else:
+            self.history.append(DataframeBrowserHistory(new_df, self.history[-1].browse_columns))
+        self._future.clear()
+        self._msg_cbs(table_changed=True)
+
+    def _msg_cbs(self, table_changed=True):
+        for cb in self.change_cbs:
+            cb(self, table_changed)
+
+
+def _get_function_by_name(_class, function_name):
+    try:
+        # prefer class member functions
+        return getattr(_class, function_name)
+    except AttributeError:
+        pass
+    # look in globals
+    possibles = globals().copy()
+    # possibles.update(locals())
+    return possibles.get(function_name)
 
 class defaultdict_of_DataframeColumnSegmentCache(defaultdict):
     def __init__(self, get_df):
@@ -285,11 +415,8 @@ class defaultdict_of_DataframeColumnSegmentCache(defaultdict):
 # what the right way of handling that would be.
 # searches happen here, because we are simply iterating through the strings
 # for the next match.
-# sorts, filters, etc. also happen here, because they modify the dataframe and therefore
-# require re-computation of the viewing strings. This eventually could change
-# if the individual column views could register for callbacks during dataframe changes.
-# The history object can be responsible for maintaining the history
-# of dataframes and column hides/shifts
+# TODO this should probably get merged into the browser, or else the DataframeTableBrowser should
+# transparently redirect function calls to this object.
 class DataframeRowView(object):
     DEFAULT_VIEW_HEIGHT = 100
     def __init__(self, get_df):
@@ -301,8 +428,6 @@ class DataframeRowView(object):
         self.scroll_margin_up = 10 # TODO these are very arbitrary and honestly it might be better
         self.scroll_margin_down = 30 # if they didn't exist inside this class at all.
 
-    # TODO: str.contains/match
-
     @property
     def df(self):
         return self._get_df()
@@ -311,11 +436,26 @@ class DataframeRowView(object):
         return self._top_row
     @property
     def selected_relative(self):
-        assert self._selected_row >= self._top_row and self._selected_row <= self._top_row + self.view_height
-        return self._selected_row - self._top_row
+        assert self.selected_row >= self.top_row and self.selected_row <= self.top_row + self.view_height
+        return self.selected_row - self.top_row
     @property
     def selected_row(self):
         return self._selected_row
+    @selected_row.setter
+    def selected_row(self, new_row):
+        """Sets the selected row. Row index must be valid for the backing table.
+
+        Automatically adjusts the internal _top_row in order to keep the selected_row within the view_height."""
+        assert new_row >= 0 and new_row < len(self.df)
+        old_row = self._selected_row
+        self._selected_row = new_row
+        if new_row > old_row:
+            while self._selected_row > self._top_row + self.scroll_margin_down:
+                self._top_row += 1 # TODO this could be faster
+        elif new_row < old_row: # scroll up
+            while self._selected_row < self._top_row + self.scroll_margin_up and self._top_row > 0:
+                self._top_row -= 1
+        assert self._selected_row >= self._top_row and self._selected_row <= self._top_row + self.view_height
 
     def header(self, column_name):
         return self._column_cache[column_name].header
@@ -326,7 +466,7 @@ class DataframeRowView(object):
         bottom_row = bottom_row if bottom_row is not None else min(top_row + self.view_height, len(self.df))
         return self._column_cache[column_name].rows(top_row, bottom_row)
     def selected_row_content(self, column_name):
-        return self.df.iloc[self._selected_row, self.df.columns.get_loc(column_name)]
+        return self.df.iloc[self.selected_row, self.df.columns.get_loc(column_name)]
     def change_column_width(self, column_name, n):
         self._column_cache[column_name].change_width(n)
     def justify(self, column_name):
@@ -336,42 +476,18 @@ class DataframeRowView(object):
         """search downward or upward in the current column for a string match.
         Can exclude the current row in order to search 'farther' in the dataframe."""
         case_insensitive = case_insensitive if case_insensitive is not None else search_string.islower()
-        starting_row = self._selected_row + int(skip_current) if down else self._selected_row - int(skip_current)
+        starting_row = self.selected_row + int(skip_current) if down else self.selected_row - int(skip_current)
         df_index = self._column_cache[column_name].search_cache(search_string, starting_row, down, case_insensitive)
         if df_index is not None:
-            self.scroll_rows(df_index - self._selected_row)
+            self.selected_row = df_index
             return True
         return False
 
-    def jump_to_row(self, location, _1_based_indexing=True):
-        """location may be either an integer row index or a fraction to be multiplied by the dataframe length."""
-        print('jump to row', location)
-        if isinstance(location, float):
-            assert location >= 0.0 and location <= 1.0
-            location = int(location * len(self.df))
-        elif _1_based_indexing:
-            location -= 1
-        assert location >= 0 and location <= len(self.df)
-        self.scroll_rows(location - self._selected_row)
-
-    def scroll_rows(self, n):
-        """ positive numbers are scroll down; negative are scroll up"""
-        print('scrolling rows', self._selected_row, n)
-        self._selected_row = max(0, min(self._selected_row + n, len(self.df) - 1))
-        if n > 0:
-            while self._selected_row > self._top_row + self.scroll_margin_down:
-                self._top_row += 1 # TODO this could be faster
-        elif n < 0: # scroll up
-            while self._selected_row < self._top_row + self.scroll_margin_up and self._top_row > 0:
-                self._top_row -= 1
-        assert self._selected_row >= self._top_row and self._selected_row <= self._top_row + self.view_height
-
-    def df_changed(self, browser=None):
-        for col_name, cache in self._column_cache.items():
-            cache.clear_cache()
-        new_df_last_row = len(self.df) - 1
-        self._selected_row = max(0, min(self._selected_row, new_df_last_row))
-        self._top_row = max(0, min(self._top_row, new_df_last_row))
+    def _df_changed(self, browser, table_changed):
+        if table_changed:
+            for col_name, cache in self._column_cache.items():
+                cache.clear_cache()
+            self.selected_row = max(0, min(self.selected_row, len(self.df) - 1))
 
 
 class DataframeColumnSegmentCache(object):
@@ -432,11 +548,6 @@ class DataframeColumnSegmentCache(object):
             self.row_strings = new_cache
             self._update_native_width()
         return self.row_strings[top_row-self.top_of_cache : bottom_row-self.top_of_cache]
-
-    # def _set_cache(self, string_cache, new_top_of_cache):
-    #     self.top_of_cache = new_top_of_cache
-    #     self.row_strings = string_cache
-    #     self._update_native_width()
 
     def clear_cache(self):
         self.top_of_cache = 0

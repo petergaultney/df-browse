@@ -24,6 +24,7 @@ class AdvancedEdit(urwid.Edit):
                         - 'position': last completion cursor position
                       this dict must be used (and can be filled) to find next completion)
                    and which return the full text completed"""
+        assert callable(callback) or callback is None
         self.completion_cb = callback
         self.completion_data = dict()
 
@@ -50,6 +51,7 @@ class AdvancedEdit(urwid.Edit):
                         self.completion_data.clear()
                     else:
                         before = before[:-len(self.completion_data['completed'])]
+                print(self.completion_cb)
                 complet = self.completion_cb(before, self.completion_data)
                 self.completion_data['completed'] = complet[len(before):]
                 self.set_edit_text(complet+self.edit_text[self.edit_pos:])
@@ -95,3 +97,27 @@ class ListCompleter:
                 completion_data['last'] = self.words[idx]
                 return self.words[idx]
         return prefix
+
+
+def get_leftmost_visible_column(urwid_cols, current_size):
+    cols = urwid_cols.column_widths(current_size)
+    for idx, col in enumerate(cols):
+        if col != 0:
+            return idx
+    return 0
+
+def get_rightmost_visible_column(urwid_cols, current_size):
+    cols = urwid_cols.column_widths(current_size)
+    start = get_leftmost_visible_column(urwid_cols, current_size)
+    for idx, col in enumerate(cols[start:]):
+        if col == 0:
+            return idx + start - 1
+    return idx + start - 1
+
+def translate_urwid_col_to_browser_col(urwid_cols, ucol, browser, col_gap, current_size):
+    col = get_leftmost_visible_column(urwid_cols, current_size)
+    next_col_start = browser.view.width(browser.browse_columns[col])
+    while ucol > next_col_start:
+        col += 1
+        next_col_start += browser.view.width(browser.browse_columns[col]) + col_gap
+    return col

@@ -1,11 +1,16 @@
 # UI debug printing
+
 import timeit
+import traceback
 
 DEBUG = True
 debug_filename = 'debug.log'
 
 def debug_print(*args):
-    strs = [str(x) for x in args]
+    try:
+        strs = [exception_to_string(args[0])]
+    except Exception as e:
+        strs = [str(x) for x in args]
     debug_file.write(' '.join(strs) + '\n')
     debug_file.flush()
 
@@ -30,3 +35,9 @@ def _end(name):
     if elapsed_time > 5:
         print('\n')
     print('{:20} {:10.2f} ms'.format(name, elapsed_time * 1000))
+
+
+def exception_to_string(excp):
+    stack = traceback.extract_stack()[:-3] + traceback.extract_tb(excp.__traceback__)  # add limit=??
+    pretty = traceback.format_list(stack)
+    return ''.join(pretty) + '\n  {} {}'.format(excp.__class__,excp)
