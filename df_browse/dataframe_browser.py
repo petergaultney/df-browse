@@ -15,15 +15,18 @@ from df_browse.gui_debug import *
 
 _global_urwid_browser_frame = None
 
-# a decorator
-def browser_func(f):
+_browser_funcs = dict()
+
+# a decorator that adds a function to a set of functions exposed by the browser
+def df_func(f):
     this_module = sys.modules[__name__]
     print('adding function to dataframe_browser module', f, this_module, f.__name__)
     # print(this_module.__dict__.keys())
-    setattr(this_module, f.__name__, f)
+    global _browser_funcs
+    _browser_funcs[f.__name__] = f
+    # setattr(this_module, f.__name__, f)
     # print(this_module.__dict__.keys())
     # globals()[f.__name__] = f
-
 
 def browse(df, name=None):
     return MultipleDataframeBrowser().add_df(df, name).browse
@@ -171,14 +174,7 @@ class DataframeBrowserHistory(object):
         self.df = df
         self.browse_columns = browse_columns
 
-# the DataframeTableBrowser implements an interface of sorts that
-# the Urwid table browser uses to display a table.
-# It maintains history and implements the API necessary for viewing a dataframe as a table.
-# TODO provide separate callbacks for when the dataframe itself has changed
-# vs when the column order/set has changed.
-#
-# Please note that this class will not behave well if you have multiple columns with the same
-# column name.
+
 class DataframeTableBrowser(object):
     """Implements the table browser contract for a single pandas Dataframe.
 
@@ -199,7 +195,20 @@ class DataframeTableBrowser(object):
     column shifting, etc.
     These selections may or may not be considered as part of the undo history, depending on implementation.
 
+    A content accessor, indexed by column name and row index. Where either is not provided, the current
+    selected column and row should be the default.
+
     A length, corresponding to the number of rows in the underlying table.
+
+    A top row parameter, informing a UI which row should be the topmost visible row in the UI.
+
+    Per column (identified by name), the following should be made available:
+        the column header. This may or may not be settable.
+        the column width. This must be settable, but a reasonable default value should be generated for each column.
+        strings 'lines()' representing a displayable view of each row of the column. They:
+            must be the exact length of the column width;
+            must be pre-aligned/padded for display;
+            should not necessarily contain the full content of the cell - they are for display purposes only.
 
     An undo history for both the browse columns and the table itself.
     Though the history may keep track of these changes internally as separate items,
@@ -210,6 +219,16 @@ class DataframeTableBrowser(object):
     A redo history, comprised of actions that were undone without any intervening 'undoable'
     table modifications having been performed. Like 'undo', the interface must be provided, but
     the actual functionality need not necessarily be implemented.
+
+    A call_browser_func method that will take a string and a set of keyword arguments, will resolve
+    that name to a function (this may be implementation-dependent), may optionally enhance the set of
+    keyword arguments based on its internal logic, and will then call that function with the set of provided
+    and added keyword arguments. The function's effect will be implementation dependent, but a given
+    browser implementation should define a contract that it will honor for all of its browser functions.
+
+    A browser_func_names property listing the browser functions that the browser knows about, for the purpose
+    of advertising them to a user. This may or may not be an exhaustive list of the functions that
+    the browser can actually resolve by name.
 
     """
     def __init__(self, df):
@@ -235,7 +254,7 @@ class DataframeTableBrowser(object):
     # Browser interface methods and properties....
     @property
     def browse_columns(self):
-        """The set of columns currently being viewed, in their viewing order."""
+        """The list of columns currently being viewed, in their viewing order."""
         return self.history[-1].browse_columns
     @browse_columns.setter
     def browse_columns(self, new_browse_columns):
@@ -271,6 +290,11 @@ class DataframeTableBrowser(object):
     @property
     def all_columns(self):
         return list(self.original_df.columns)
+
+    def content(self, column_name=None, row_index=None):
+        column_name = column_name if column_name else self.selected_column
+        row_index = row_index if row_index is not None else self.selected_row
+        return self.df.iloc[row_index, self.df.columns.get_loc(column_name)]
 
     def __len__(self):
         return len(self.df)
@@ -314,8 +338,16 @@ class DataframeTableBrowser(object):
 
     def call_browser_func(self, function_name, **kwargs):
         print('looking up browser function by name', function_name)
-        this_module = sys.modules[__name__]
-        func = getattr(this_module, function_name)
+        global _browser_funcs
+        if function_name in _browser_funcs:
+            func = _browser_funcs[function_name]
+        else:
+            try: # TODO not sure if any of this really works.
+                this_module = sys.modules[__name__]
+                func = getattr(this_module, function_name)
+            except:
+                func = globals().get(function_name)
+
         print('found browser function', func)
         new_df = func(self.df,
                       c=self._real_column_index,
@@ -324,6 +356,11 @@ class DataframeTableBrowser(object):
                       **kwargs)
         if new_df is not None:
             self._change_df(new_df)
+
+    @property
+    def browser_func_names(self):
+        global _browser_funcs
+        return list(_browser_funcs.keys())
 
     # All properties and methods following are NOT part of the browser interface
     @property
@@ -384,17 +421,6 @@ class DataframeTableBrowser(object):
         for cb in self.change_cbs:
             cb(self, table_changed)
 
-
-def _get_function_by_name(_class, function_name):
-    try:
-        # prefer class member functions
-        return getattr(_class, function_name)
-    except AttributeError:
-        pass
-    # look in globals
-    possibles = globals().copy()
-    # possibles.update(locals())
-    return possibles.get(function_name)
 
 class defaultdict_of_DataframeColumnSegmentCache(defaultdict):
     def __init__(self, get_df):
@@ -465,12 +491,9 @@ class DataframeRowView(object):
         top_row = top_row if top_row is not None else self._top_row
         bottom_row = bottom_row if bottom_row is not None else min(top_row + self.view_height, len(self.df))
         return self._column_cache[column_name].rows(top_row, bottom_row)
-    def selected_row_content(self, column_name):
-        return self.df.iloc[self.selected_row, self.df.columns.get_loc(column_name)]
+
     def change_column_width(self, column_name, n):
         self._column_cache[column_name].change_width(n)
-    def justify(self, column_name):
-        return self._column_cache[column_name].justify
 
     def search(self, column_name, search_string, down=True, skip_current=False, case_insensitive=False):
         """search downward or upward in the current column for a string match.
@@ -532,6 +555,7 @@ class DataframeColumnSegmentCache(object):
     @property
     def bottom_of_cache(self):
         return self.top_of_cache + len(self.row_strings)
+
     def rows(self, top_row, bottom_row):
         df = self.get_src_df()
         new_top_of_cache = max(top_row - self._min_cache_on_either_side, 0)
@@ -555,8 +579,6 @@ class DataframeColumnSegmentCache(object):
 
     def search_cache(self, search_string, starting_row, down, case_insensitive):
         """Returns absolute index where search_string was found; otherwise -1"""
-        # TODO this code 100% works, but could it be cleaner?
-        df = self.get_src_df()
         print('***** NEW SEARCH', self.column_name, search_string, starting_row, down, case_insensitive)
         starting_row_in_cache = starting_row - self.top_of_cache
         print('running search on current cache, starting at row ', starting_row_in_cache)
@@ -568,17 +590,8 @@ class DataframeColumnSegmentCache(object):
             print('failed local cache search - moving on to iterate through dataframe')
             # search by chunk through dataframe starting from current search position in cache
             end_of_cache_search = self.top_of_cache + len(self.row_strings) if down else self.top_of_cache
-            df_sliceable = DataframeColumnSliceToStringList(df, self.column_name, self.justify)
-            for chunk, chunk_start_idx in search_chunk_yielder(df_sliceable, end_of_cache_search, down):
-                chunk_idx = search_list_for_str(chunk, search_string, 0 if down else len(chunk) - 1, down, case_insensitive)
-                if chunk_idx is not None:
-                    actual_idx = chunk_idx + chunk_start_idx
-                    print('found', search_string, 'at chunk idx', chunk_idx, 'in chunk starting at', chunk_start_idx,
-                          'which makes real idx', actual_idx, 'with result proof:', df.iloc[actual_idx,df.columns.get_loc(self.column_name)])
-                    return actual_idx
-                else:
-                    print('not found in this chunk...')
-            return None
+            sliceable = DataframeColumnSliceToStringList(self.get_src_df(), self.column_name, self.justify)
+            return search_sliceable_by_yielded_chunks_for_str(sliceable, search_string, end_of_cache_search, down, case_insensitive)
 
 
 class DataframeColumnSliceToStringList(object):

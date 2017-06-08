@@ -38,3 +38,12 @@ def search_list_for_str(lst, search_string, starting_item, down, case_insensitiv
             # print('found! ', s, 'at', idx, 'starting from', starting_item, 'in list of len', len(lst), 'down?', down)
             return starting_item + idx if down else starting_item - idx
     return None
+
+
+def search_sliceable_by_yielded_chunks_for_str(sliceable, search_string, starting_index, down, case_insensitive):
+    """This is the main entry point for everything in this module."""
+    for chunk, chunk_start_idx in search_chunk_yielder(sliceable, starting_index, down):
+        found_at_chunk_idx = search_list_for_str(chunk, search_string, 0 if down else len(chunk) - 1, down, case_insensitive)
+        if found_at_chunk_idx is not None:
+            return found_at_chunk_idx + chunk_start_idx
+    return None
