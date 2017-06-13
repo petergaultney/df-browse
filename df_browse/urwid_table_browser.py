@@ -23,7 +23,7 @@ def _given(columns, width):
 
 def generate_strings_segments_for_column(view, col_name, is_focus_col):
     column_strings = view.lines(col_name)
-    selected_row = view.selected_relative
+    selected_row = view.selected_row - view.top_row # the relative index of the selected row in the view
     pile_of_strs = list()
     pile_of_strs.append(view.header(col_name) +
                         '\n...' if view.top_row > 1 and is_focus_col else '\n')
@@ -168,6 +168,7 @@ class Minibuffer(urwid.WidgetWrap):
             # we've typed in the name of a custom function!
             print('setting up call to browser function ', cmd_str)
             self._set_command(cmd_str)
+            # TODO support browser functions providing their own tab-completers
         else: # this is where we call a custom browser function
             self.browser_frame.table_view.browser.call_browser_func(
                 self.active_command, args_str=cmd_str)
@@ -243,13 +244,13 @@ class UrwidTableView(urwid.WidgetWrap):
     def switch_to_browser(self, name):
         """Open an existing dataframe, or accept a new one."""
         print('switching to', name)
-        self.multibrowser.set_active_browser(name)
+        self.multibrowser.active_browser_name = name
         self.browser.add_change_callback(self.update_view)
         self.update_view()
 
     # TODO maybe move these into a container class that mirrors MultiDataframeBrowser
     def rename_active_browser(self, new_name):
-        self.multibrowser.rename_active_browser(new_name)
+        self.multibrowser.rename_browser(self.multibrowser.active_browser_name, new_name)
 
     def update_view(self, browser=None, table_changed=True):
         print('updating view')
@@ -292,6 +293,7 @@ class UrwidTableView(urwid.WidgetWrap):
             elif button == 5.0:
                 self.scroll(1)
             else:
+                print(row)
                 col = urwid_utils.translate_urwid_col_to_browser_col(self.urwid_cols, col, self.browser,
                                                                      self._col_gap, self._size)
                 self.set_rowcol_focus(self._col_by_index(col), row - 2)
@@ -321,8 +323,8 @@ class UrwidTableView(urwid.WidgetWrap):
         """Column name and relative row number."""
         print('trying to set focus to column "', column_name, '"')
         self.set_col_focus(self._col_idx_by_name(column_name))
-        if row != self.browser.view.selected_relative:
-            self.scroll(row - self.browser.view.selected_relative)
+        if row != self.browser.view.selected_row - self.browser.view.top_row:
+            self.scroll(row - (self.browser.view.selected_row - self.browser.view.top_row))
 
     def search_current_col(self, search_string, down=True, skip_current=False):
         self.browser.search_column(self._selected_col, search_string, down, skip_current)
@@ -361,9 +363,7 @@ class UrwidTableView(urwid.WidgetWrap):
     def keypress(self, size, key):
         self._size = size
 
-        if key in keybs('merge'):
-            pass
-        elif key in keybs('browse-right'):
+        if key in keybs('browse-right'):
             self.set_col_focus(self._selected_col_idx + 1)
         elif key in keybs('browse-left'):
             self.set_col_focus(self._selected_col_idx - 1)

@@ -1,9 +1,10 @@
 from df_browse.gui_debug import print
 
-from df_browse.dataframe_browser import df_func
+from df_browse.dataframe_browser import df_func, DFCmd
 
 # keyword arguments provided to dataframe mutator functions include:
-# args_str, cn, c, r (where cn is column name, c is column index, and r is row index)
+# args_str, cn, c, r (where cn is column name, c is column index, and r is row index),
+# bcols (the browser's visible columns, ordered)
 
 @df_func
 def eval_df(df, args_str, cn, c=0, r=0, **kwargs):
@@ -38,7 +39,17 @@ def str_match(df, args_str, cn, **kwargs):
 def str_contains(df, args_str, cn, **kwargs):
     return df.loc[df[cn].str.contains(args_str, na=False)]
 
+def save_df(df, path):
+    if path.endswith('.csv'):
+        df.to_csv(path, index=False)
+    elif path.endswith('.hdf'):
+        df.to_hdf(path)
+
 @df_func
-def test_add_drop(df, args_str, **kwargs):
-    df['e'] = df['level_integer'] + 5
-    return df.drop('last_name', axis=1)
+def save_full_df(df, args_str, **kwargs):
+    save_df(df, args_str)
+
+@df_func
+def save_visible_df(df, args_str, bcols, **kwargs):
+    df = df.loc[:, bcols]
+    save_df(df, args_str)

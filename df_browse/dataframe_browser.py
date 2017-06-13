@@ -5,6 +5,7 @@ import sys
 import copy
 import pandas as pd
 import numpy as np
+import functools
 
 import df_browse.urwid_table_browser as urwid_table_browser
 
@@ -19,14 +20,23 @@ _browser_funcs = dict()
 
 # a decorator that adds a function to a set of functions exposed by the browser
 def df_func(f):
-    this_module = sys.modules[__name__]
-    print('adding function to dataframe_browser module', f, this_module, f.__name__)
-    # print(this_module.__dict__.keys())
+    print('adding function to dataframe_browser module', f, f.__name__)
     global _browser_funcs
     _browser_funcs[f.__name__] = f
-    # setattr(this_module, f.__name__, f)
-    # print(this_module.__dict__.keys())
-    # globals()[f.__name__] = f
+    return functools.wraps(f)
+
+
+class DFCmd(object):
+    def __init__(self, help_text=None, keybindings=None, error_fmt_str=None, tab_completer=None):
+        print('in DFCompleter init')
+        self.tab_completer = tab_completer
+        self.help_text = help_text
+        self.keybindings = keybindings
+        self.error_fmt_str = error_fmt_str
+    def __call__(self, func):
+        print('DFCompleter adding function', func.__name__, 'to browser.')
+        return df_func(func)
+
 
 def browse(df, name=None):
     return MultipleDataframeBrowser().add_df(df, name).browse
@@ -47,6 +57,9 @@ class InnerObjects(object):
 
 
 class MultipleDataframeBrowser(object):
+    _settable_class_attributes = ['_MultipleDataframeBrowser__inner',
+                                  'active_browser_name']
+
     """Create one of these to start browsing pandas Dataframes in a curses-style terminal interface."""
     def __init__(self, *dfs, table_browser_frame=None):
         global _global_urwid_browser_frame
@@ -98,10 +111,6 @@ class MultipleDataframeBrowser(object):
             return True
         return False
 
-    def rename_active_browser(self, new_name):
-        """Give the active browser a different name."""
-        return self.rename_browser(self.__inner.active_browser_name, new_name)
-
     def copy_browser(self, name, new_name=None):
         if name not in self.__inner.browsers:
             return False
@@ -129,7 +138,7 @@ class MultipleDataframeBrowser(object):
         return keys
 
     def __setattr__(self, key, value):
-        if key == '_MultipleDataframeBrowser__inner':
+        if key in MultipleDataframeBrowser._settable_class_attributes:
             super().__setattr__(key, value)
         else:
             self[key] = value
@@ -147,13 +156,19 @@ class MultipleDataframeBrowser(object):
     def active_browser(self):
         return self.__inner.browsers[self.__inner.active_browser_name] if self.__inner.active_browser_name else None
 
-    def set_active_browser(self, name):
-        self.__inner.active_browser_name = name
+    def _set_active_browser(self, name):
+        if name in self.__inner.browsers:
+            self.__inner.active_browser_name = name
+        else:
+            print('Cannot set the active browser name to the name of a browser that doesn\'t exist.')
         return self
 
     @property
     def active_browser_name(self):
         return self.__inner.active_browser_name
+    @active_browser_name.setter
+    def active_browser_name(self, browser_name):
+        self._set_active_browser(browser_name)
     @property
     def all_browser_names(self):
         return list(self.__inner.browsers.keys())
@@ -170,6 +185,7 @@ class MultipleDataframeBrowser(object):
 
 
 class DataframeBrowserHistory(object):
+    # This object's members should never be modified.
     def __init__(self, df, browse_columns):
         self.df = df
         self.browse_columns = browse_columns
@@ -247,9 +263,8 @@ class DataframeTableBrowser(object):
         dfb._selected_column_index = self._selected_column_index
         return dfb
 
-    # TODO Join
+    # TODO separate out code that is a generic browser vs the dataframe-specific code.
     # TODO support displaying index as column. could use -1 as special value to indicate index in place of column name
-    # TODO write out to file.
 
     # Browser interface methods and properties....
     @property
@@ -336,6 +351,10 @@ class DataframeTableBrowser(object):
         if cb not in self.change_cbs:
             self.change_cbs.append(cb)
 
+    def _msg_cbs(self, table_changed=True):
+        for cb in self.change_cbs:
+            cb(self, table_changed)
+
     def call_browser_func(self, function_name, **kwargs):
         print('looking up browser function by name', function_name)
         global _browser_funcs
@@ -347,15 +366,8 @@ class DataframeTableBrowser(object):
                 func = getattr(this_module, function_name)
             except:
                 func = globals().get(function_name)
-
         print('found browser function', func)
-        new_df = func(self.df,
-                      c=self._real_column_index,
-                      r=self.selected_row,
-                      cn=self.selected_column,
-                      **kwargs)
-        if new_df is not None:
-            self._change_df(new_df)
+        self._call_df_func(func, **kwargs)
 
     @property
     def browser_func_names(self):
@@ -417,9 +429,15 @@ class DataframeTableBrowser(object):
         self._future.clear()
         self._msg_cbs(table_changed=True)
 
-    def _msg_cbs(self, table_changed=True):
-        for cb in self.change_cbs:
-            cb(self, table_changed)
+    def _call_df_func(self, func, **kwargs):
+        new_df = func(self.df,
+                      c=self._real_column_index,
+                      r=self.selected_row,
+                      cn=self.selected_column,
+                      bcols=self.browse_columns,
+                      **kwargs)
+        if new_df is not None:
+            self._change_df(new_df)
 
 
 class defaultdict_of_DataframeColumnSegmentCache(defaultdict):
@@ -457,22 +475,22 @@ class DataframeRowView(object):
     @property
     def df(self):
         return self._get_df()
+    def __len__(self):
+        return len(self.df)
     @property
     def top_row(self):
+        assert self._top_row >= 0 and self._top_row < len(self)
         return self._top_row
     @property
-    def selected_relative(self):
-        assert self.selected_row >= self.top_row and self.selected_row <= self.top_row + self.view_height
-        return self.selected_row - self.top_row
-    @property
     def selected_row(self):
+        assert self._selected_row >= self.top_row and self._selected_row <= self.top_row + self.view_height
         return self._selected_row
     @selected_row.setter
     def selected_row(self, new_row):
         """Sets the selected row. Row index must be valid for the backing table.
 
         Automatically adjusts the internal _top_row in order to keep the selected_row within the view_height."""
-        assert new_row >= 0 and new_row < len(self.df)
+        assert new_row >= 0 and new_row < len(self)
         old_row = self._selected_row
         self._selected_row = new_row
         if new_row > old_row:
@@ -604,8 +622,3 @@ class DataframeColumnSliceToStringList(object):
                                            columns=[self.column], justify=self.justify).split('\n')
     def __len__(self):
         return len(self.df)
-
-
-if __name__ == '__main__':
-    import sys
-    browse_dir(sys.argv[1])

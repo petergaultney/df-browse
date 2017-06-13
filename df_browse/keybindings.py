@@ -1,6 +1,21 @@
+
+class TBCmd(object):
+    def __init__(self, function, tab_completer=None, help_text=None, keybindings=None, error_fmt_str=None):
+        self.func = function
+        self.tab_completer = tab_completer
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+    def complete(self, prefix, completion_data):
+        return self.tab_completer(prefix, completion_data)
+    def help(self):
+        return self.help_text
+    def keybindings(self):
+        return self.keybindings
+    def format_error(self, e, cmd_str, **kwargs):
+        return error_fmt_str.format(cmd_str)
+
 # supports multiple keybindings per command
 _commands = { # these commands are specifically for use in the browser
-    'merge': ['m'],
     'insert-column': ['i'],
     'hide-column': ['H'],
     'search': ['ctrl s'],
@@ -35,9 +50,9 @@ _commands = { # these commands are specifically for use in the browser
 }
 
 _exception_hints = {
-    'jump-to-column': 'Could not find column {}',
+    'jump-to-column': 'Column "{}" not found in table browser.',
     'jump-to-row': 'Rows may only be indexed by integer or floating point number, and must not be out of range.',
-    'insert-column': 'Column "{}" not found in table browser.'
+    'insert-column': 'Column "{}" not found in table browser.',
 }
 
 # on startup, verify no duplicate keybindings for developer (my) sanity
