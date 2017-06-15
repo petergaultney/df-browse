@@ -7,9 +7,11 @@ import df_browse.browser_utils as browser_utils
 
 from df_browse.list_utils import *
 
-from df_browse.keybindings import keybs, cmd_hint
+from df_browse.keybindings import keybs, cmd_hint, rev_keybs
 
 from df_browse.gui_debug import *
+
+import df_browse.ipython_utils as ipython_utils
 
 PAGE_SIZE = 20
 
@@ -137,6 +139,12 @@ class Minibuffer(urwid.WidgetWrap):
             self.edit_text.setCompletionMethod(urwid_utils.ListCompleter(
                 self.browser_frame.table_view.browser.browser_func_names,
                 self.browser_frame.hint).complete)
+        elif self.active_command == 'ipython':
+            print('prompting for code?')
+            import IPython
+            self.edit_text.setCompletionMethod(ipython_utils.IPythonCompleter(self.browser_frame.hint).complete)
+            # code = IPython.core.getipython.get_ipython().prompt_for_code()
+            print('prompted for code')
 
     def _search(self, search_str, down, skip_current):
         if 'search' in self.active_command:
@@ -169,6 +177,10 @@ class Minibuffer(urwid.WidgetWrap):
             print('setting up call to browser function ', cmd_str)
             self._set_command(cmd_str)
             # TODO support browser functions providing their own tab-completers
+        elif self.active_command == 'ipython':
+            print(cmd_str)
+            ipython_utils.execute_ipython_command(cmd_str)
+            self.give_away_focus()
         else: # this is where we call a custom browser function
             self.browser_frame.table_view.browser.call_browser_func(
                 self.active_command, args_str=cmd_str)
@@ -255,9 +267,9 @@ class UrwidTableView(urwid.WidgetWrap):
     def update_view(self, browser=None, table_changed=True):
         print('updating view')
         try:
-            old_col = self._selected_col_idx
+            old_col = self.urwid_cols.focus_position
         except:
-            old_col = 0
+            old_col = self._selected_col_idx
         del self.urwid_cols.contents[:]
         if len(self.browser.browse_columns) > 0:
             # TODO don't recreate these column piles - instead keep track of them
@@ -267,7 +279,7 @@ class UrwidTableView(urwid.WidgetWrap):
                 column_width = self.browser.view.width(col_name)
                 self.urwid_cols.contents.append((pile, _given(self.urwid_cols, column_width)))
             try:
-                self.urwid_cols.focus_position = old_col
+                self.urwid_cols.focus_position = min(old_col, len(self.urwid_cols.contents))
             except Exception as e:
                 print('exception in update_view when trying to set columns focus_position', e)
                 self.urwid_frame.hint(str(e))
@@ -293,7 +305,7 @@ class UrwidTableView(urwid.WidgetWrap):
             elif button == 5.0:
                 self.scroll(1)
             else:
-                print(row)
+                print('moving to row', row)
                 col = urwid_utils.translate_urwid_col_to_browser_col(self.urwid_cols, col, self.browser,
                                                                      self._col_gap, self._size)
                 self.set_rowcol_focus(self._col_by_index(col), row - 2)
@@ -302,18 +314,24 @@ class UrwidTableView(urwid.WidgetWrap):
     def set_col_focus(self, col_num):
         # the only function allowed to directly modify urwid_cols.focus_position
         col_num = max(0, min(col_num, len(self.browser.browse_columns) - 1))
+        print(self.urwid_cols.focus_position)
         try:
             current_selected_col_idx = self._selected_col_idx
             if current_selected_col_idx != col_num:
+                print('moving col focus from', current_selected_col_idx, col_num )
                 if col_num > urwid_utils.get_rightmost_visible_column(self.urwid_cols, self._size):
+                    print('going leftward far enough to change columns viewed')
                     self.urwid_cols.focus_position = col_num
                 elif col_num < urwid_utils.get_leftmost_visible_column(self.urwid_cols, self._size):
+                    print('going rightward far enough...')
                     while col_num < urwid_utils.get_leftmost_visible_column(self.urwid_cols, self._size):
                         self.urwid_cols.focus_position -= 1
                 self.browser.selected_column = col_num
                 self.urwid_cols.contents[current_selected_col_idx][0].reset_attribs()
                 self.urwid_cols.contents[col_num][0].reset_attribs()
                 self.update_modeline_text()
+                print(self.urwid_cols.focus_position)
+
             return True
         except Exception as e:
             print('exception in set focus', e)
@@ -430,6 +448,10 @@ class UrwidTableView(urwid.WidgetWrap):
             self.browser.call_browser_func('sort_on_columns', columns=[self.browser.selected_column], ascending=False)
         elif key in keybs('command'):
             self.urwid_frame.focus_minibuffer(None)
+        elif rev_keybs(key):
+            cmd = rev_keybs(key)
+            print('got command from keypress', key, cmd)
+            self.urwid_frame.focus_minibuffer(cmd)
         else:
             self.urwid_frame.hint('got unknown keypress: ' + key)
             return None

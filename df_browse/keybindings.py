@@ -47,6 +47,7 @@ _commands = { # these commands are specifically for use in the browser
     'jump-to-column': ['c'],
     'jump-to-row': ['r'],
     'command': ['/'],
+    'ipython': ['p'],
 }
 
 _exception_hints = {
@@ -83,3 +84,10 @@ def set_keybindings_for_command(command, keybindings):
 
 def keybs(command):
     return _commands[command][:] # so that you don't change the original list directly
+
+def rev_keybs(key):
+    # TODO set up reverse dict
+    for cmd in _commands.keys():
+        if key in _commands[cmd]:
+            return cmd
+    return None

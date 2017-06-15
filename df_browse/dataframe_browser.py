@@ -42,8 +42,15 @@ def browse(df, name=None):
     return MultipleDataframeBrowser().add_df(df, name).browse
 
 
-def browse_dir(directory_of_csvs):
-    mdb = MultipleDataframeBrowser()
+def browse_dir(directory_of_csvs, ipython_session=None):
+    try:
+        import IPython
+        ipython_session = IPython.core.getipython.get_ipython()
+        print(ipython_session)
+    except:
+        print('*** failed to get ipython global session')
+        pass
+    mdb = MultipleDataframeBrowser(ipython_session=ipython_session)
     dataframes_and_names = list()
     for fn in os.listdir(directory_of_csvs):
         df = pd.read_csv(directory_of_csvs + os.sep + fn, index_col=False)
@@ -61,7 +68,7 @@ class MultipleDataframeBrowser(object):
                                   'active_browser_name']
 
     """Create one of these to start browsing pandas Dataframes in a curses-style terminal interface."""
-    def __init__(self, *dfs, table_browser_frame=None):
+    def __init__(self, *dfs, table_browser_frame=None, ipython_session=None):
         global _global_urwid_browser_frame
         if not table_browser_frame:
             if not _global_urwid_browser_frame:
@@ -71,6 +78,7 @@ class MultipleDataframeBrowser(object):
         self.__inner.urwid_frame = table_browser_frame
         self.__inner.browsers = dict()
         self.__inner.active_browser_name = None
+        self.__inner.ipython_session = ipython_session
         for df in dfs:
             self.add_df(df)
 

@@ -48,13 +48,20 @@ class AdvancedEdit(urwid.Edit):
                     if (not self.completion_data['completed']
                         or self.completion_data['position'] != self.edit_pos
                         or not before.endswith(self.completion_data['completed'])):
+                        print('clearing completion data', self.completion_data)
                         self.completion_data.clear()
                     else:
+                        print('setting before from completion data', before)
                         before = before[:-len(self.completion_data['completed'])]
-                print(self.completion_cb)
+                        print('set before to completion data', before)
+                print('calling completer callback', self.completion_data)
                 complet = self.completion_cb(before, self.completion_data)
+                # full_text = before + complet
                 self.completion_data['completed'] = complet[len(before):]
+                # self.completion_data['completed'] = full_text
+                print(self.completion_data, before)
                 self.set_edit_text(complet+self.edit_text[self.edit_pos:])
+                # self.set_edit_text(full_text)
                 self.set_edit_pos(len(complet))
                 self.completion_data['position'] = self.edit_pos
                 return
@@ -63,6 +70,7 @@ class AdvancedEdit(urwid.Edit):
                 pass
         rval = super(AdvancedEdit, self).keypress(size, key)
         return rval
+
 
 
 class ListCompleter:
