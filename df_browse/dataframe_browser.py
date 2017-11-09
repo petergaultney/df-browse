@@ -3,9 +3,11 @@ from collections import defaultdict
 import os
 import sys
 import copy
+import functools
+
 import pandas as pd
 import numpy as np
-import functools
+
 
 import df_browse.urwid_table_browser as urwid_table_browser
 
@@ -20,12 +22,12 @@ _browser_funcs = dict()
 
 # a decorator that adds a function to a set of functions exposed by the browser
 def df_func(f):
-    print('adding function to dataframe_browser module', f, f.__name__)
+    debug_print('adding function to dataframe_browser module', f, f.__name__)
     global _browser_funcs
     _browser_funcs[f.__name__] = f
     return functools.wraps(f)
 
-
+# eventually this should replace df_func, so that keybindings and help text are integrated.
 class DFCmd(object):
     def __init__(self, help_text=None, keybindings=None, error_fmt_str=None, tab_completer=None):
         print('in DFCompleter init')
@@ -37,9 +39,11 @@ class DFCmd(object):
         print('DFCompleter adding function', func.__name__, 'to browser.')
         return df_func(func)
 
+import df_browse.dataframe_browser_functions
 
 def browse(df, name=None):
-    return MultipleDataframeBrowser().add_df(df, name).browse
+    print('Creating a browser...  call fg() on this object to open it.')
+    return MultipleDataframeBrowser().add_df(df, name).browse()
 
 
 def browse_dir(directory_of_csvs, ipython_session=None):
@@ -95,7 +99,9 @@ class MultipleDataframeBrowser(object):
             self.__inner.active_browser_name = name
         return self # for call chaining
 
-    def _make_unique_name(self, name=''):
+    def _make_unique_name(self, name):
+        if name is None:
+            name = ''
         name = name.strip()
         name = name if name else 'df'
         test_name = name if name != 'df' else 'df_0'
@@ -374,8 +380,13 @@ class DataframeTableBrowser(object):
                 func = getattr(this_module, function_name)
             except:
                 func = globals().get(function_name)
-        print('found browser function', func)
-        self._call_df_func(func, **kwargs)
+        if func is None:
+            msg = 'Failed to find DF function {}'.format(function_name)
+            debug_print(msg)
+            raise Exception(msg)
+        else:
+            print('found browser function', func)
+            self._call_df_func(func, **kwargs)
 
     @property
     def browser_func_names(self):
@@ -438,6 +449,7 @@ class DataframeTableBrowser(object):
         self._msg_cbs(table_changed=True)
 
     def _call_df_func(self, func, **kwargs):
+        assert func is not None
         new_df = func(self.df,
                       c=self._real_column_index,
                       r=self.selected_row,

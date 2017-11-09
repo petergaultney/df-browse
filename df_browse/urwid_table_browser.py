@@ -1,5 +1,6 @@
-import urwid
 import sys, re, os
+
+import urwid
 
 import df_browse
 import df_browse.urwid_utils as urwid_utils
