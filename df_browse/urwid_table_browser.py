@@ -382,6 +382,13 @@ class UrwidTableView(urwid.WidgetWrap):
     def keypress(self, size, key):
         self._size = size
 
+        # TODO this should go away in favor of a dynamic lookup
+        # where the key is found in a full set of dynamically-populated keybindings
+        # and then the associated function is called.
+        # there might have to be a difference between the keybindings
+        # registered as core functionality
+        # vs the ones registered as browser functions.
+
         if key in keybs('browse-right'):
             self.set_col_focus(self._selected_col_idx + 1)
         elif key in keybs('browse-left'):
