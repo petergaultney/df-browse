@@ -18,7 +18,7 @@ def nondebug_print(*args):
     pass
 
 if DEBUG:
-    print('opening debug file!')
+    # print('opening debug file!')
     debug_file = open('debug.log', 'w+')
     print = debug_print
 else:

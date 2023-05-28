@@ -10,40 +10,20 @@ import numpy as np
 
 
 import df_browse.urwid_table_browser as urwid_table_browser
+import df_browse.dataframe_browser_functions
 
 from df_browse.list_utils import *
 from df_browse.chunk_search_utils import *
-
 from df_browse.gui_debug import *
+from .func_core import BROWSER_FUNCS
 
 _global_urwid_browser_frame = None
 
-_browser_funcs = dict()
-
-# a decorator that adds a function to a set of functions exposed by the browser
-def df_func(f):
-    debug_print('adding function to dataframe_browser module', f, f.__name__)
-    global _browser_funcs
-    _browser_funcs[f.__name__] = f
-    return functools.wraps(f)
-
-# eventually this should replace df_func, so that keybindings and help text are integrated.
-class DFCmd(object):
-    def __init__(self, help_text=None, keybindings=None, error_fmt_str=None, tab_completer=None):
-        print('in DFCompleter init')
-        self.tab_completer = tab_completer
-        self.help_text = help_text
-        self.keybindings = keybindings
-        self.error_fmt_str = error_fmt_str
-    def __call__(self, func):
-        print('DFCompleter adding function', func.__name__, 'to browser.')
-        return df_func(func)
-
-import df_browse.dataframe_browser_functions
 
 def browse(df, name=None):
     print('Creating a browser...  call fg() on this object to open it.')
-    return MultipleDataframeBrowser().add_df(df, name).browse()
+    mb = MultipleDataframeBrowser()
+    mb.browse(mb.add_df(df, name))
 
 
 def browse_dir(directory_of_csvs, ipython_session=None):
@@ -86,10 +66,11 @@ class MultipleDataframeBrowser(object):
         for df in dfs:
             self.add_df(df)
 
-    def add_df(self, df, name=None):
-        """Direct interface to adding a dataframe.
+    def add_df(self, df, name=None) -> str:
+        """Direct interface to adding a dataframe. Returns name.
 
-        Preferably provide your own name here, but if you don't, we'll assign one..."""
+        Preferably provide your own name here, but if you don't, we'll assign one...
+        """
         assert df is not None
         name = self._make_unique_name(name)
         print('wrapping dataframe in new table browser with name', name)
@@ -97,7 +78,7 @@ class MultipleDataframeBrowser(object):
         self.__inner.browsers[name].add_change_callback(self.__inner.urwid_frame.table_view.update_view)
         if not self.__inner.active_browser_name:
             self.__inner.active_browser_name = name
-        return self # for call chaining
+        return name
 
     def _make_unique_name(self, name):
         if name is None:
@@ -161,7 +142,7 @@ class MultipleDataframeBrowser(object):
         if key in self.__inner.browsers:
             self.__inner.browsers[self.active_browser_name]._change_df(value)
         else:
-            self.add_df(key, value)
+            self.add_df(value, name=key)
 
     def get_browser(self, name):
         return self.__inner.browsers[name]
@@ -187,8 +168,11 @@ class MultipleDataframeBrowser(object):
     def all_browser_names(self):
         return list(self.__inner.browsers.keys())
 
-    def browse(self):
+    def browse(self, name: str = ''):
         """This actually brings up the interface. Can be re-entered after it exits and returns."""
+        if name:
+            self._set_active_browser(name)
+
         self.__inner.urwid_frame.start(self)
         return self # for the ultimate chain, that returns itself so it can be started again.
 
@@ -371,9 +355,9 @@ class DataframeTableBrowser(object):
 
     def call_browser_func(self, function_name, **kwargs):
         print('looking up browser function by name', function_name)
-        global _browser_funcs
-        if function_name in _browser_funcs:
-            func = _browser_funcs[function_name]
+        global BROWSER_FUNCS
+        if function_name in BROWSER_FUNCS:
+            func = BROWSER_FUNCS[function_name]
         else:
             try: # TODO not sure if any of this really works.
                 this_module = sys.modules[__name__]
@@ -390,8 +374,8 @@ class DataframeTableBrowser(object):
 
     @property
     def browser_func_names(self):
-        global _browser_funcs
-        return list(_browser_funcs.keys())
+        global BROWSER_FUNCS
+        return list(BROWSER_FUNCS.keys())
 
     # All properties and methods following are NOT part of the browser interface
     @property
