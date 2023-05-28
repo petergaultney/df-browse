@@ -3,7 +3,11 @@
 Python library that provides spreadsheet-style browsing of a Pandas
 dataframe within a terminal/curses environment.
 
-It was borne out of my love for Pandas, but my frustration with how difficult it is to really navigate/browse/inspect a large dataframe while you're operating on it within IPython.
+It was borne out of my love for Pandas, but my frustration with how
+difficult it is to really navigate/browse/inspect a large dataframe
+while you're operating on it within IPython.
+
+![alt text](./.images/see-it.png)
 
 ## Installation
 
