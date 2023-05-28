@@ -3,19 +3,15 @@
 Python library that provides spreadsheet-style browsing of a Pandas
 dataframe within a terminal/curses environment.
 
-It was borne out of my love for curses-style/modal interfaces, and a frustration with how
-difficult it is to really navigate/browse/inspect a large dataframe
-while you're operating on it within IPython.
+It was borne out of my love for curses-style/modal interfaces, and a
+frustration with how difficult it is to really navigate/browse/inspect
+a large dataframe while you're operating on it within IPython.
 
-![alt text](./.images/see-it.png)
+![Image visible on GitHub](./.images/see-it.png)
 
 ## Installation
 
-Right now, there's not a great way to install this except as a
-standalone environment using `poetry`.
-
-It may also be possible to install into an existing environment using
-a from-source `pip install`.
+`pip install dfbrowse`
 
 ## Getting started
 
@@ -68,3 +64,8 @@ You can use `q` on your keyboard to go back to the shell/ipython session.
 
 Re-enter the browser via `%show <df_name>`, or `%fg` to foreground the
 most recent dataframe.
+
+## bugs
+
+There are lots. I even know about some of them. Please feel free to
+report any you find on GitHub.
