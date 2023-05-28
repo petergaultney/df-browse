@@ -1,6 +1,5 @@
-from df_browse.gui_debug import print
-
 from .func_core import df_func
+from .gui_debug import print
 
 # keyword arguments provided to dataframe mutator functions include:
 # args_str, cn, c, r (where cn is column name, c is column index, and r is row index),

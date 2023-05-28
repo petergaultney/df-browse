@@ -5,7 +5,7 @@ from IPython.core import getipython
 
 import pandas as pd
 
-from df_browse.dataframe_browser import MultipleDataframeBrowser
+from .dataframe_browser import MultipleDataframeBrowser
 
 
 def _parse_and_file_load(browser, load_func, line: str):
@@ -29,22 +29,22 @@ class IpythonCli(Magics):
     def __init__(self, shell):
         super(IpythonCli, self).__init__(shell)
         self.browser = MultipleDataframeBrowser(ipython_session=getipython.get_ipython())
-        print('try %pq or %csv.')
-        globals()['browser'] = self
+        print('try %pq or %csv, or use %show my_df')
 
     @line_magic
-    def browser(self, _):
+    def get_browser(self, _):
+        """Embed the browser in your globals so you can access it directly."""
+        globals()['browser'] = self.browser
         return self.browser
 
     @line_magic
     def fg(self, name):
-        self.browser.browse(name or None)
+        self.browser.browse(name.strip() or None)
 
     @line_magic
-    def see(self, name):
+    def show(self, name):
         name = name.strip()
         df = get_ipython().ev(name)
-        print(name, df)
         self.browser[name] = df
         self.browser.browse(name)
 

@@ -1,3 +1,8 @@
+import operator as op
+import types
+import numpy as np
+
+
 # this converts a string column into a datetime column
 # if a column cannot be found, it is simply skipped
 def convert_df_date_cols(df, date_cols):
@@ -23,9 +28,6 @@ def df_filter_date_range(df, date_col, date_start=None, date_end=None):
     # operation does not happen in-place, but instead returns a filtered 'view' of the dataframe.
     return df
 
-import operator as op
-import types
-import numpy as np
 
 comparison_ops_dict = {
     # '+' : op.add,
@@ -42,7 +44,7 @@ comparison_ops_dict = {
     '!=' : op.ne,
     '=~' : [op.contains],
     '!~' : [op.contains, op.not_],
-    }
+}
 
 def operator_lookup(operator):
     if isinstance(operator, (types.FunctionType, types.BuiltinFunctionType)):
@@ -50,12 +52,13 @@ def operator_lookup(operator):
     else:
         return comparison_ops_dict[operator]
 
-# all sorts of things can make this except.
+
+# all sorts of things can make this raise.
 # the caller should be aware that invalid queries will be violently rejected.
 def where(df, col_name, operator, val):
     col = df[col_name]
     operator = operator_lookup(operator)
-    
+
     if op.contains in operator and col.dtype.type == np.object_:
         # this is a special case, because op.contains does not work with Series
         if op.not_ in operator:
@@ -63,12 +66,10 @@ def where(df, col_name, operator, val):
         else:
             df = df[col.str.contains(val, na=False)]
         return df
-    
+
     try:
         # try converting the operator to the type of the column
         return df[operator(col, col.dtype.type(val))]
     except:
         # if that doesn't work, fail over to naive comparison
         return df[operator(col, val)]
-
-    

@@ -2,17 +2,11 @@ import sys, re, os
 
 import urwid
 
-import df_browse
-import df_browse.urwid_utils as urwid_utils
-import df_browse.browser_utils as browser_utils
+from . import urwid_utils, browser_utils, ipython_utils
 
-from df_browse.list_utils import *
-
-from df_browse.keybindings import keybs, cmd_hint, rev_keybs
-
-from df_browse.gui_debug import *
-
-import df_browse.ipython_utils as ipython_utils
+from .list_utils import insert_item_if_not_present, find_and_remove_list_item, remove_list_index, shift_list_item
+from .keybindings import keybs, cmd_hint, rev_keybs
+from .gui_debug import debug_print, print
 
 PAGE_SIZE = 20
 
@@ -467,14 +461,14 @@ class UrwidTableView(urwid.WidgetWrap):
             self.urwid_frame.hint('got unknown keypress: ' + key)
             return None
 
-palette = [
+palette = (
     ('active_col', 'light blue', 'black'),
     ('def', 'white', 'black'),
     ('modeline', 'black', 'light gray'),
     ('moving', 'light red', 'black'),
     ('active_row', 'dark red', 'black'),
     ('active_element', 'yellow', 'black'),
-    ]
+)
 
 
 # there really only ever needs to be one of these instantiated at a given time,

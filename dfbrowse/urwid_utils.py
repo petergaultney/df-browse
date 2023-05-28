@@ -2,7 +2,6 @@ import urwid
 import sys
 import os
 
-from df_browse.gui_debug import *
 
 # It appears that I found this here: https://wiki.goffi.org/wiki/Urwid-satext/en
 class AdvancedEdit(urwid.Edit):

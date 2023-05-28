@@ -18,7 +18,7 @@ class TBCmd(object):
 _commands = { # these commands are specifically for use in the browser
     'insert-column': ['i'],
     'hide-column': ['H'],
-    'search': ['ctrl s'],
+    'search': ['ctrl s'],  # not working for... some reason? I think ipython might be stealing it.
     'search-backward': ['ctrl r'],
     'sort-ascending': ['s'],
     'sort-descending': ['S'],
@@ -79,7 +79,7 @@ def set_keybindings_for_command(command, keybindings):
         if cmd != command:
             for keyb in keybs:
                 if keyb in keybindings:
-                    raise Exception('Attempting to shadow keybindings for ' + cmd)
+                    raise ValueError('Attempting to shadow keybindings for ' + cmd)
     _commands[command] = keybindings
 
 def keybs(command):

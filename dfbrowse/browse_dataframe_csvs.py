@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 
-import df_browse
-import df_browse.dataframe_browser_functions
+import dfbrowse
+import dfbrowse.dataframe_browser_functions
 
 import IPython
 
 if __name__ == '__main__':
     import sys
-    browser = df_browse.browse_dir(sys.argv[1])
+    browser = dfbrowse.browse_dir(sys.argv[1])
     print('')
     print('    ****** Thanks for using the dataframe browser! ******')
     print('    The browser has spawned an IPython shell that will allow you to interact freely')

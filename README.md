@@ -1,4 +1,4 @@
-# df-browse
+# dfbrowse
 
 Python library that provides spreadsheet-style browsing of a Pandas
 dataframe within a terminal/curses environment.
@@ -19,11 +19,11 @@ a from-source `pip install`.
 
 ## Getting started
 
-df_browse is generally intended to be used _inside_ IPython. Start by
+dfbrowse is generally intended to be used _inside_ IPython. Start by
 launching IPython, then import the IPython magics:
 
 ```
-import df_browse.ipython_main
+import dfbrowse.ipython_main
 ```
 
 If you want to jump straight into browsing, load a parquet or CSV directly:
@@ -39,7 +39,7 @@ import pandas as pd
 
 emp = pd.read_parquet('~/work/project2/my_data.parquet')
 
-%see emp
+%show emp
 ```
 
 ### Inside the browser
@@ -66,5 +66,5 @@ browser with one of the options above.
 
 You can use `q` on your keyboard to go back to the shell/ipython session.
 
-Re-enter the browser via `%see <df_name>`, or `%fg` to foreground the
+Re-enter the browser via `%show <df_name>`, or `%fg` to foreground the
 most recent dataframe.

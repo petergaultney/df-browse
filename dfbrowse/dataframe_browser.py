@@ -9,12 +9,10 @@ import pandas as pd
 import numpy as np
 
 
-import df_browse.urwid_table_browser as urwid_table_browser
-import df_browse.dataframe_browser_functions
+from . import urwid_table_browser, dataframe_browser_functions
 
-from df_browse.list_utils import *
-from df_browse.chunk_search_utils import *
-from df_browse.gui_debug import *
+from dfbrowse.chunk_search_utils import search_list_for_str, search_sliceable_by_yielded_chunks_for_str
+from dfbrowse.gui_debug import print, debug_print
 from .func_core import BROWSER_FUNCS
 
 _global_urwid_browser_frame = None

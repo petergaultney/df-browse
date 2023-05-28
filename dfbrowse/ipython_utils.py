@@ -1,7 +1,7 @@
 import os
 import IPython
 
-from df_browse.gui_debug import *
+from dfbrowse.gui_debug import *
 
 class IPythonCompleter(object):
     def __init__(self, hint):
