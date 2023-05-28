@@ -91,7 +91,10 @@ class Modeline(urwid.WidgetWrap):
             current_cell=current_cell))
     def show_basic_commands(self):
         # help text
-        self.set_text('(hjkl) browse; (H)ide col; (u)ndo; (+-) size col; (,.) move col; (ctrl-s)ea(r)ch col; (s)o(r)t')
+        self.set_text(
+            '(hjkl) browse; (H)ide col; (+-) colwidth; (,.) move col; (u)ndo; '
+            '(ctrl-s)ea(r)ch col; (s)ort; / to see other cmds; (q)uit'
+        )
     def show_command_options(self):
         self.set_text('type column name to add, then press enter. Press Esc to return to browsing.')
 
