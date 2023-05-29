@@ -23,7 +23,6 @@ def search_chunk_yielder(sliceable, start_location, down=True, chunk_size=100):
     while not_at_end(sliceable, start_of_next_chunk, down):
         yield get_next_chunk(sliceable, start_of_next_chunk, chunk_size, down)
         start_of_next_chunk = start_of_next_chunk + chunk_size if down else start_of_next_chunk - chunk_size
-    raise StopIteration
 
 
 def search_list_for_str(lst, search_string, starting_item, down, case_insensitive):

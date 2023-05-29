@@ -42,7 +42,9 @@ emp = pd.read_parquet('~/work/project2/my_data.parquet')
 
 Once inside the browser, you can navigate with arrow keys and the mouse.
 
-Press `?` to find out about some basic navigation commands.
+Press `?` to find out about some basic browsing commands. You can
+resize columns, hide them, reorder them, and even search the row
+contents, with a few keystrokes.
 
 There are many other commands that you can discover in `keybindings.py`.
 

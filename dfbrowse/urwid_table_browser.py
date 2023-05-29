@@ -87,7 +87,7 @@ class Modeline(urwid.WidgetWrap):
         # help text
         self.set_text(
             '(hjkl) browse; (H)ide col; (+-) colwidth; (,.) move col; (u)ndo; '
-            '(ctrl-s)ea(r)ch col; (s)ort; / to see other cmds; (q)uit'
+            '(alt-s)ea(r)ch col; (s)ort; / to see other cmds; (q)uit'
         )
     def show_command_options(self):
         self.set_text('type column name to add, then press enter. Press Esc to return to browsing.')
@@ -195,14 +195,14 @@ class Minibuffer(urwid.WidgetWrap):
                 print('error trying to submit command: ', self.active_command, cmd_str)
                 print(e)
                 self.browser_frame.hint(cmd_hint(self.active_command).format(cmd_str))
-        elif key == 'esc' or key == 'ctrl g':
+        elif key in keybs('cancel'):
             self.give_away_focus()
         elif key == 'ctrl c':
             # raise urwid.ExitMainLoop()
             self.give_away_focus()
-        elif key == 'ctrl s':
+        elif key in keybs('search'):
             self._search(self.edit_text.get_edit_text(), True, True)
-        elif key == 'ctrl r':
+        elif key in keybs('search-backward'):
             self._search(self.edit_text.get_edit_text(), False, True)
         else: # active search - TODO maybe replace with 'active results' being fed directly to the command callback
             self.edit_text.keypress(size, key)

@@ -16,10 +16,11 @@ class TBCmd(object):
 
 # supports multiple keybindings per command
 _commands = { # these commands are specifically for use in the browser
+    'cancel': ['esc', 'ctrl g'],
     'insert-column': ['i'],
     'hide-column': ['H'],
-    'search': ['ctrl s'],  # not working for... some reason? I think ipython might be stealing it.
-    'search-backward': ['ctrl r'],
+    'search': ['ctrl s', 'meta s'],  # ctrl s not working for... some reason?
+    'search-backward': ['ctrl r', 'meta r'],
     'sort-ascending': ['s'],
     'sort-descending': ['S'],
     'browse-right': ['right', 'l'],
